@@ -47,4 +47,13 @@ namespace AustinHarris.JsonRpc
             get { return jsonParamName; }
         }
     }
+
+    /// <summary>
+    /// Used to assign context parameter.
+    /// </summary>
+    [AttributeUsage(AttributeTargets.Parameter, Inherited = false, AllowMultiple = false)]
+    public sealed class JsonRpcContextAttribute : Attribute
+    {
+
+    }
 }

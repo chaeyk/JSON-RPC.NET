@@ -109,34 +109,6 @@
         /// </summary>
         public string SessionId { get; private set; }
 
-        /// <summary>
-        /// Provides access to a context specific to each JsonRpc method invocation.
-        /// Warning: Must be called from within the execution context of the jsonRpc Method to return the context
-        /// </summary>
-        /// <returns></returns>
-        public static object RpcContext()
-        {
-            return __currentRpcContext;
-        }
-
-        [ThreadStatic]
-        static JsonRpcException __currentRpcException;
-        /// <summary>
-        /// Allows you to set the exception used in in the JsonRpc response.
-        /// Warning: Must be called from the same thread as the jsonRpc method.
-        /// </summary>
-        /// <param name="exception"></param>
-        public static void RpcSetException(JsonRpcException exception)
-        {
-            __currentRpcException = exception;
-        }
-        public static JsonRpcException RpcGetAndRemoveRpcException()
-        {
-            var ex = __currentRpcException;
-            __currentRpcException = null ;
-            return ex;
-        }
-
         private AustinHarris.JsonRpc.PreProcessHandler externalPreProcessingHandler;
         private AustinHarris.JsonRpc.PostProcessHandler externalPostProcessingHandler;
         private Func<JsonRequest, JsonRpcException, JsonRpcException> externalErrorHandler;
@@ -168,9 +140,9 @@
         /// <param name="parameterNameTypeMapping">The parameter names and types that will be positionally bound to the function</param>
         /// <param name="parameterNameDefaultValueMapping">Optional default values for parameters</param>
         /// <param name="implementation">A reference to the Function</param>
-        public void RegisterFuction(string methodName, Dictionary<string, Type> parameterNameTypeMapping, Dictionary<string, object> parameterNameDefaultValueMapping, Delegate implementation)
+        public void RegisterFuction(string methodName, Dictionary<string, Type> parameterNameTypeMapping, Dictionary<string, object> parameterNameDefaultValueMapping, string contextParameter, Delegate implementation)
         {
-            MetaData.AddService(methodName, parameterNameTypeMapping, parameterNameDefaultValueMapping, implementation);
+            MetaData.AddService(methodName, parameterNameTypeMapping, parameterNameDefaultValueMapping, contextParameter, implementation);
         }
 
         public void UnRegisterFunction(string methodName)
@@ -196,8 +168,6 @@
         /// <returns></returns>
         public async Task<JsonResponse> Handle(JsonRequest Rpc, Object RpcContext = null)
         {
-            AddRpcContext(RpcContext);
-
             var preProcessingException = PreProcess(Rpc, RpcContext);
             if (preProcessingException != null)
             {
@@ -250,9 +220,19 @@
             if (Rpc.Params is Newtonsoft.Json.Linq.JArray)
             {
                 var jarr = ((Newtonsoft.Json.Linq.JArray)Rpc.Params);
-                for (int i = 0; i < loopCt; i++)
+                for (int i = 0, j = 0; i < loopCt; i++, j++)
                 {
-                    parameters[i] = CleanUpParameter(jarr[i], metadata.parameters[i]);
+                    if (metadata.parameters[i].Name == metadata.contextParameter)
+                    {
+                        Array.Resize(ref parameters, parameters.Length + 1);
+                        loopCt++;
+                        paramCount++;
+                        parameters[i++] = RpcContext;
+                    }
+                    else
+                    {
+                        parameters[i] = CleanUpParameter(jarr[j], metadata.parameters[i]);
+                    }
                 }
             }
             else if (Rpc.Params is Newtonsoft.Json.Linq.JObject)
@@ -260,7 +240,14 @@
                 var asDict = Rpc.Params as IDictionary<string, Newtonsoft.Json.Linq.JToken>;
                 for (int i = 0; i < loopCt && i < metadata.parameters.Length; i++)
                 {
-                    if (asDict.ContainsKey(metadata.parameters[i].Name) == true)
+                    if (metadata.parameters[i].Name == metadata.contextParameter)
+                    {
+                        Array.Resize(ref parameters, parameters.Length + 1);
+                        loopCt++;
+                        paramCount++;
+                        parameters[i++] = RpcContext;
+                    }
+                    else if (asDict.ContainsKey(metadata.parameters[i].Name) == true)
                     {
                         parameters[i] = CleanUpParameter(asDict[metadata.parameters[i].Name], metadata.parameters[i]);
                         continue;
@@ -282,23 +269,18 @@
                 }
             }
 
-            // Optional Parameter support
-            // check if we still miss parameters compared to metadata which may include optional parameters.
+            // Optional Parameter & Context Parameter support
+            // check if we still miss parameters compared to metadata which may include optional parameters or context parameter.
             // if the rpc-call didn't supply a value for an optional parameter, we should be assinging the default value of it.
-            if (parameters.Length < metaDataParamCount && metadata.defaultValues.Length > 0) // rpc call didn't set values for all optional parameters, so we need to assign the default values for them.
+            if (parameters.Length < metaDataParamCount &&
+                (metadata.defaultValues.Length > 0 || !String.IsNullOrEmpty(metadata.contextParameter))) // rpc call didn't set values for all optional parameters, so we need to assign the default values for them.
             {
                 var suppliedParamsCount = parameters.Length; // the index we should start storing default values of optional parameters.
                 var missingParamsCount = metaDataParamCount - parameters.Length; // the amount of optional parameters without a value set by rpc-call.
+                var contextParamsCount = String.IsNullOrEmpty(metadata.contextParameter) ? 0 : 1;
                 Array.Resize(ref parameters, parameters.Length + missingParamsCount); // resize the array to include all optional parameters.
 
-                for (int paramIndex = parameters.Length - 1, defaultIndex = metadata.defaultValues.Length - 1;     // fill missing parameters from the back 
-                    paramIndex >= suppliedParamsCount && defaultIndex >= 0;                                        // to don't overwrite supplied ones.
-                    paramIndex--, defaultIndex--)
-                {
-                    parameters[paramIndex] = metadata.defaultValues[defaultIndex].Value;
-                }
-
-                if (missingParamsCount > metadata.defaultValues.Length)
+                if (missingParamsCount > metadata.defaultValues.Length + contextParamsCount)
                 {
                     JsonResponse response = new JsonResponse
                     {
@@ -313,6 +295,22 @@
                     };
                     return PostProcess(Rpc, response, RpcContext);
                 }
+
+                for (int paramIndex = parameters.Length - 1, defaultIndex = metadata.defaultValues.Length - 1;     // fill missing parameters from the back 
+                    paramIndex >= suppliedParamsCount && (defaultIndex >= 0 || contextParamsCount > 0);            // to don't overwrite supplied ones.
+                    paramIndex--, defaultIndex--)
+                {
+                    if (metadata.parameters[paramIndex].Name == metadata.contextParameter)
+                    {
+                        parameters[paramIndex] = RpcContext;
+                        contextParamsCount--;
+                    }
+                    else
+                    {
+                        parameters[paramIndex] = metadata.defaultValues[defaultIndex].Value;
+                    }
+                }
+
             }
 
             if (parameters.Length != metaDataParamCount)
@@ -350,13 +348,8 @@
                 }
 
                 var last = parameters.LastOrDefault();
-                var contextException = RpcGetAndRemoveRpcException();
                 JsonResponse response = null;
-                if (contextException != null)
-                {
-                    response = new JsonResponse() { Error = ProcessException(Rpc, contextException), Id = Rpc.Id };
-                }
-                else if (expectsRefException && last != null && last is JsonRpcException)
+                if (expectsRefException && last != null && last is JsonRpcException)
                 {
                     response = new JsonResponse() { Error = ProcessException(Rpc, last as JsonRpcException), Id = Rpc.Id };
                 }
@@ -397,21 +390,9 @@
             }
             finally
             {
-                RemoveRpcContext();
             }
         }
         #endregion
-
-        [ThreadStatic]
-        static object __currentRpcContext;
-        private void AddRpcContext(object RpcContext)
-        {
-            __currentRpcContext = RpcContext;
-        }
-        private void RemoveRpcContext()
-        {
-            __currentRpcContext = null;
-        }
 
         private JsonRpcException ProcessException(JsonRequest req, JsonRpcException ex)
         {

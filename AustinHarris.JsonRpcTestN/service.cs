@@ -344,13 +344,6 @@ namespace AustinHarris.JsonRpcTestN
         }
 
         [JsonRpcMethod]
-        public string TestPreProcessorSetsException(string inputValue)
-        {
-            JsonRpcContext.SetException(new JsonRpcException(-27000, "This exception was thrown using: JsonRpcContext.SetException()", null));
-            return null;
-        }
-
-        [JsonRpcMethod]
         public string TestPostProcessor(string inputValue)
         {
             return "Success!";
@@ -366,13 +359,6 @@ namespace AustinHarris.JsonRpcTestN
         public string TestPostProcessorThrowsException(string inputValue)
         {
             throw new Exception("TestException");
-        }
-
-        [JsonRpcMethod]
-        public string TestPostProcessorSetsException(string inputValue)
-        {
-            JsonRpcContext.SetException(new JsonRpcException(-27001, "This exception was thrown using: JsonRpcContext.SetException()", null));
-            return null;
         }
 
         [JsonRpcMethod]

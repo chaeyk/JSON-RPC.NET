@@ -26,6 +26,7 @@
             {
                 Dictionary<string, Type> paras = new Dictionary<string, Type>();
                 Dictionary<string, object> defaultValues = new Dictionary<string, object>(); // dictionary that holds default values for optional params.
+                string contextParameter = null;
 
                 var paramzs = meth.GetParameters();
 
@@ -52,6 +53,14 @@
 
                     if (paramzs[i].IsOptional) // if the parameter is an optional, add the default value to our default values dictionary.
                         defaultValues.Add(paramName, paramzs[i].DefaultValue);
+
+                    var contextAttrs = paramzs[i].GetCustomAttributes(typeof(JsonRpcContextAttribute), false);
+                    if (contextAttrs.Length > 0)
+                    {
+                        if (contextParameter != null)
+                            throw new Exception("There are multiple context parameters: " + contextParameter + ", " + paramName);
+                        contextParameter = paramName;
+                    }
                 }
 
                 var resType = meth.ReturnType;
@@ -63,7 +72,7 @@
                     var methodName = handlerAttribute.JsonMethodName == string.Empty ? meth.Name : handlerAttribute.JsonMethodName;
                     var newDel = Delegate.CreateDelegate(System.Linq.Expressions.Expression.GetDelegateType(paras.Values.ToArray()), instance /*Need to add support for other methods outside of this instance*/, meth);
                     var handlerSession = Handler.GetSessionHandler(sessionID);
-                    handlerSession.MetaData.AddService(methodName, paras, defaultValues, newDel);
+                    handlerSession.MetaData.AddService(methodName, paras, defaultValues, contextParameter, newDel);
                 }
             }
         }

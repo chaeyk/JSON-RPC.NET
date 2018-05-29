@@ -34,9 +34,9 @@ namespace AustinHarris.JsonRpc
             TypeHashes = new List<string>();
 	    }
 
-        internal void AddService(string method, Dictionary<string,Type> parameters, Dictionary<string, object> defaultValues, Delegate dele)
+        internal void AddService(string method, Dictionary<string,Type> parameters, Dictionary<string, object> defaultValues, string contextParameter, Delegate dele)
         {
-            var newService = new SMDService(transport,"JSON-RPC-2.0",parameters, defaultValues, dele);
+            var newService = new SMDService(transport,"JSON-RPC-2.0",parameters, defaultValues, contextParameter, dele);
             Services.Add(method,newService);
         }
 
@@ -72,7 +72,7 @@ namespace AustinHarris.JsonRpc
         /// <param name="envelope">URL, PATH, JSON, JSON-RPC-1.0, JSON-RPC-1.1, JSON-RPC-2.0</param>
         /// <param name="parameters"></param>
         /// <param name="defaultValues"></param>
-        public SMDService(string transport, string envelope, Dictionary<string, Type> parameters, Dictionary<string, object> defaultValues, Delegate dele)
+        public SMDService(string transport, string envelope, Dictionary<string, Type> parameters, Dictionary<string, object> defaultValues, string contextParameter, Delegate dele)
         {
             // TODO: Complete member initialization
             this.dele = dele;
@@ -98,6 +98,8 @@ namespace AustinHarris.JsonRpc
 
             // this is getting the return type from the end of the param list
             this.returns = new SMDResult(parameters.Values.LastOrDefault());
+
+            this.contextParameter = contextParameter;
         }
         public string transport { get; private set; }
         public string envelope { get; private set; }
@@ -116,6 +118,11 @@ namespace AustinHarris.JsonRpc
         /// Stores default values for optional parameters.
         /// </summary>
         public ParameterDefaultValue[] defaultValues { get; private set; }
+
+        /// <summary>
+        /// Stores context parameter name.
+        /// </summary>
+        public string contextParameter;
     }
 
     public class SMDResult

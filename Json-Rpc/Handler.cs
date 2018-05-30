@@ -226,8 +226,8 @@
                     {
                         Array.Resize(ref parameters, parameters.Length + 1);
                         loopCt++;
-                        paramCount++;
-                        parameters[i++] = RpcContext;
+                        parameters[i] = RpcContext;
+                        j--;
                     }
                     else
                     {
@@ -244,8 +244,7 @@
                     {
                         Array.Resize(ref parameters, parameters.Length + 1);
                         loopCt++;
-                        paramCount++;
-                        parameters[i++] = RpcContext;
+                        parameters[i] = RpcContext;
                     }
                     else if (asDict.ContainsKey(metadata.parameters[i].Name) == true)
                     {

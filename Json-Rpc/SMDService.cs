@@ -215,7 +215,23 @@ namespace AustinHarris.JsonRpc
                     if (item.PropertyType != t)
                     {
                         var jt = GetTypeRecursive(item.PropertyType);
-                        jo.Add(item.Name, jt);
+                        ParameterInfo[] parameterInfos = item.GetIndexParameters();
+                        if (parameterInfos?.Length > 0)
+                        {
+                            string name = item.Name + "[";
+                            for (int i = 0; i < parameterInfos.Length; i++)
+                            {
+                                name += parameterInfos[i].ParameterType.Name;
+                                if (i != parameterInfos.Length - 1)
+                                    name += ",";
+                            }
+                            name += "]";
+                            jo.Add(name, jt);
+                        }
+                        else
+                        {
+                            jo.Add(item.Name, jt);
+                        }
                     }
                     else
                     {
